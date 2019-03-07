@@ -1,0 +1,134 @@
+---
+title: "Analise das infrações de trânsito no Distrito Federal"
+author: "Filipe Tatarli"
+date: "02/03/2019"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Bibliotecas usadas no projeto:
+```{r Libraries, include=TRUE}
+#library(ggplot2)
+#library(gridExtra)
+#library(ggcorrplot)
+library(dplyr)
+```
+
+Carregando os dados: 
+```{r Data Preparation, include=FALSE}
+setwd("/Users/filipetatarli/Documents/GitHub/analise_infracoes_transito_DF/")
+
+julho2018    <- read.csv('data/2018-08-27-infracoes.csv' , header = TRUE, sep = ";", stringsAsFactors = TRUE)
+agosto2018   <- read.csv('data/2018-09-13-infracoes.csv' , header = TRUE, sep = ";", stringsAsFactors = TRUE)
+setembro2018 <- read.csv('data/2018-10-02-infracoes.csv' , header = TRUE, sep = ";", stringsAsFactors = TRUE)
+outubro2018  <- read.csv('data/2018-11-29-infracoes.csv' , header = TRUE, sep = ";", stringsAsFactors = TRUE)
+novembro2018 <- read.csv('data/2018-12-19-infracoes.csv' , header = TRUE, sep = ";", stringsAsFactors = TRUE)
+dezembro2018 <- read.csv('data/2019-01-22-infracoes.csv' , header = TRUE, sep = ";", stringsAsFactors = TRUE)
+```
+
+
+```{r}
+
+# removendo colunas
+julho2018 <- select (julho2018,-c(descricao,tipo_infrator))
+
+agosto2018 <- select (agosto2018,-c(descricao,tipo_infrator))
+
+setembro2018 <- select (setembro2018,-c(descricao,tipo_infrator,auinf_local_rodovia,auinf_local_km,auinf_local_referencia,auinf_local_latitude,auinf_local_longitude,auinf_local_complemento))
+
+outubro2018 <- select (outubro2018,-c(descricao,tipo_infrator,auinf_local_rodovia,auinf_local_km,auinf_local_referencia,auinf_local_latitude,auinf_local_longitude,auinf_local_complemento))
+
+novembro2018 <- select (novembro2018,-c(descricao,tipo_infrator,auinf_local_rodovia,auinf_local_km,auinf_local_referencia,auinf_local_latitude,auinf_local_longitude,auinf_local_complemento))
+
+dezembro2018 <- select (dezembro2018,-c(descricao,tipo_infrator,auinf_local_rodovia,auinf_local_km,auinf_local_referencia,auinf_local_latitude,auinf_local_longitude,auinf_local_complemento))
+
+tabela_gravidade <- distinct(dezembro2018, tipo_infracao, grav_tipo, .keep_all = FALSE)
+
+julho2018$tipo_infracao    <- as.character(trimws(julho2018$tipo_infracao))
+agosto2018$tipo_infracao   <- as.character(trimws(agosto2018$tipo_infracao))
+setembro2018$tipo_infracao <- as.character(trimws(setembro2018$tipo_infracao))
+outubro2018$tipo_infracao  <- as.character(trimws(outubro2018$tipo_infracao))
+novembro2018$tipo_infracao <- as.character(trimws(novembro2018$tipo_infracao))
+dezembro2018$tipo_infracao <- as.character(trimws(dezembro2018$tipo_infracao))
+
+(julho2018 <- left_join(julho2018, tabela_gravidade, by = c("tipo_infracao" = "tipo_infracao")))
+(agosto2018 <- left_join(agosto2018, tabela_gravidade, by = c("tipo_infracao" = "tipo_infracao")))
+
+julho2018$anomes    <- '201807'
+agosto2018$anomes   <- '201808' 
+setembro2018$anomes <- '201809' 
+outubro2018$anomes  <- '201810' 
+novembro2018$anomes <- '201811' 
+dezembro2018$anomes <- '201812'
+
+infracoes <- bind_rows(julho2018, agosto2018, setembro2018, outubro2018, novembro2018, dezembro2018)
+
+infracoes$dt_cometimento   <- as.character(trimws(infracoes$dt_cometimento))
+infracoes$hora_cometimento <- as.character(trimws(infracoes$hora_cometimento))
+
+infracoes$tipo_veiculo <- as.character(trimws(infracoes$tipo_veiculo))
+
+infracoes$periodo <- NA
+infracoes$periodo <- ifelse(infracoes$hora_cometimento >= '06:00' & infracoes$hora_cometimento <= '11:59', 'Manhã', infracoes$periodo)
+infracoes$periodo <- ifelse(infracoes$hora_cometimento >= '12:00' & infracoes$hora_cometimento <= '17:59', 'Tarde', infracoes$periodo)
+infracoes$periodo <- ifelse(infracoes$hora_cometimento >= '18:00' & infracoes$hora_cometimento <= '23:59', 'Noite', infracoes$periodo)
+infracoes$periodo <- ifelse(infracoes$hora_cometimento >= '00:00' & infracoes$hora_cometimento <= '05:59', 'Madrugada', infracoes$periodo)
+
+tipo_veiculo <- distinct(infracoes, trimws(tipo_veiculo), .keep_all = FALSE)
+
+```
+
+```{r}
+setwd("/Users/filipetatarli/Documents/GitHub/analise_infracoes_transito_DF/")
+
+depara_tipo_veiculos <- read.csv('data/depara_tipo_veiculos.csv' , header = TRUE, sep = ",", stringsAsFactors = TRUE)
+
+head(infracoes)
+
+infracoes <- left_join(infracoes, depara_tipo_veiculos, by = c("tipo_veiculo" = "DE"))
+
+colnames(depara_tipo_veiculos)[colnames(depara_tipo_veiculos)=="PARA"] <- "PARA_tipo_veiculo"
+
+infracoes_resumo <- select(infracoes, "anomes", "dt_cometimento", "periodo", "PARA_tipo_veiculo", "grav_tipo")
+
+infracoes_resumo$anomes <- as.integer(infracoes_resumo$anomes)
+
+```
+
+
+
+```{r}
+# Gráficos
+
+library(ggplot2)
+theme_set(theme_bw())
+
+table(infracoes_resumo$anomes)
+
+# histograma de qtd de infrações por mês
+ggplot(aes(x = anomes), data = infracoes_resumo) + 
+  geom_histogram(binwidth = 1, color = 'black', fill = '#00AFBB') +
+  scale_x_continuous(breaks = seq(201807,201812,1)) +
+  xlab('Meses') + 
+  ylab('Quantidade de Infrações') +
+  ggtitle('Histórico Mensal de Infrações')
+```
+
+```{r}
+
+ggplot(data = infracoes_resumo, aes(x = anomes, y = sum(anomes), group = grav_tipo)) + 
+  geom_line() + geom_point()
+```
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r Processamento dos dados de Julho 2018}
+
+```
